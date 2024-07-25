@@ -28,20 +28,29 @@ app.post("/:user/notes", async (req, res) => {
   const { user } = req.params;
   const { content, category } = req.body;
   const foundUser = await User.findOne({ name: user });
-  await Note.create({ content, category, userId: foundUser._id });
+
+  const created = await Note.create({
+    content,
+    category,
+    userId: foundUser._id,
+  });
 
   res.json({ message: `Note created successfully.` });
 });
 
 app.get("/:user/notes", async (req, res) => {
   await connect();
-  // const { user } = req.params;
+  const { user } = req.params;
+  const foundUser = await User.findOne({ name: user });
 
-  const notes = await Note.find().populate("userId");
+  const notes = await Note.find({ userId: foundUser._id }).populate(
+    "userId",
+    "-_id"
+  );
   res.json(notes);
 });
 
-// GET-Route to get all notes
+// GET Route to get all notes
 app.get("/notes", async (req, res) => {
   await connect();
   const notes = await Note.find();
@@ -52,45 +61,83 @@ app.get("/notes", async (req, res) => {
   res.json(notes);
 });
 
-// Neue POST-Route für das Hinzufügen von Notizen
-app.post("/notes", async (req, res) => {
+// GET Route to get all users
+app.get("/users", async (req, res) => {
   await connect();
-  const { content, category } = req.body;
-  const newNote = new Note({
-    content,
-    category,
-  });
-  await newNote.save();
-  res.json({ id: newNote._id });
-});
+  const users = await User.find();
 
-// Neue GET-Route für das Abrufen einer einzelnen Notiz
-app.get("/notes/:id", async (req, res) => {
-  await connect();
-  const { id } = req.params;
-  const note = await Note.findById(id);
-  if (note) {
-    res.json(note);
-  } else {
-    res.status(404).send("Note not found");
+  if (!users.length) {
+    return res.json({ message: "Sorry, could not find any users." });
   }
+  res.json(users);
 });
 
-// Neue PATCH-Route für das Aktualisieren einer einzelnen Notiz
-app.patch("/notes/:id", async (req, res) => {
+// Get Route for a single note
+app.get("/:user/notes/:id", async (req, res) => {
   await connect();
-  const { id } = req.params;
+  const { user, id } = req.params;
+
+  const foundUser = await User.findOne({ name: user });
+
+  if (!foundUser) {
+    return res.json({ message: "User not found." });
+  }
+
+  const note = await Note.findOne({ _id: id, userId: foundUser._id });
+
+  if (!note) {
+    return res.json({ message: "Note not found." });
+  }
+
+  res.json(note);
+});
+
+// Patch Route to change a single note
+app.patch("/:user/notes/:id", async (req, res) => {
+  await connect();
+  const { user, id } = req.params;
   const { content, category } = req.body;
-  const note = await Note.findByIdAndUpdate(
-    id,
+  const foundUser = await User.findOne({ name: user });
+
+  if (!foundUser) {
+    return res.json({ message: "User not found." });
+  }
+  // looking for a note with the wanted id and the userId that fits to the foundUser
+  // then the note is updated with new value for content and category
+  const updatedNote = await Note.findOneAndUpdate(
+    { _id: id, userId: foundUser._id },
     { content, category },
     { new: true }
   );
-  if (note) {
-    res.json({ message: "Note updated successfully", note });
-  } else {
-    res.status(404).send("Note not found");
+
+  if (!updatedNote) {
+    return res.json({ message: "Note not found or could not be updated." });
   }
+
+  res.json({ message: "Note updated successfully.", note: updatedNote });
+});
+
+// Delete Route for a single note
+app.delete("/:user/notes/:id", async (req, res) => {
+  await connect();
+  const { user, id } = req.params;
+
+  const foundUser = await User.findOne({ name: user });
+
+  if (!foundUser) {
+    return res.json({ message: "User not found." });
+  }
+
+  const deletedNote = await Note.findOneAndDelete({
+    _id: id,
+    userId: foundUser._id,
+  });
+
+  if (!deletedNote) {
+    return res.json({ message: "Note not found or could not be deleted." });
+  }
+
+  res.json({ message: "Note deleted successfully." });
 });
 
 const server = app.listen(port, () =>
